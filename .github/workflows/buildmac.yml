@@ -1,0 +1,38 @@
+name: Build Zachetka iOS
+on:
+  workflow_dispatch: # Запуск вручную
+
+jobs:
+  ios-build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          architecture: x64
+
+      - name: Install Dependencies
+        run: |
+          pip install flet
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Build IPA
+        run: |
+          # Собираем без подписи, чтобы можно было установить через AltStore/Sideloadly
+          flet build ipa --product "Зачётка ВГТУ" --org "vlad.os" --no-codesign
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zachetka-ios-bundle
+          # Путь куда Flet сохраняет результат сборки для iOS
+          path: build/ipa/*.ipa
