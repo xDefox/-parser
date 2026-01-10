@@ -30,44 +30,66 @@ def main(page: ft.Page):
                 results_view.controls.clear()
                 subjects = semesters[sem_num]
 
-                current_grades = [int(s['grade']) for s in subjects if str(s.get('grade')).isdigit()]
-                pending_count = len(
-                    [s for s in subjects if not str(s.get('grade')).isdigit() and s.get('grade') != "зачтено"])
-                total_count = len(subjects)
+                # 1. Находим все предметы, где УЖЕ есть цифра
+                current_grades = []
+                for s in subjects:
+                    grade_val = str(s.get("grade", ""))
+                    if grade_val.isdigit():
+                        current_grades.append(int(grade_val))
+
+                # 2. Находим предметы, которые ЕЩЕ НУЖНО сдать (где может быть оценка)
+                # Исключаем только обычные зачеты, которые "зачтено/не зачтено"
+                pending_subjects = []
+                for s in subjects:
+                    grade_val = str(s.get("grade", ""))
+                    exam_type = str(s.get("examType", "")).lower()
+
+                    # Если оценки нет И это не простой зачет
+                    if not grade_val.isdigit() and grade_val != "зачтено":
+                        if "зачет" not in exam_type or "дифф" in exam_type:
+                            pending_subjects.append(s)
+
                 sum_current = sum(current_grades)
+                count_done = len(current_grades)
+                count_pending = len(pending_subjects)
+                total_count = count_done + count_pending
+
+                sem_avg = sum_current / count_done if count_done > 0 else 0.0
 
                 def get_combinations(target_avg):
-                    if pending_count == 0: return None
-                    # Сколько баллов нужно добрать суммарно
-                    needed_sum = int(target_avg * total_count) - sum_current
+                    if total_count == 0: return "Нет оцениваемых предметов"
+                    required_sum = target_avg * total_count
+                    needed_now = required_sum - sum_current
 
-                    if needed_sum <= 0: return "Цель уже достигнута! ✅"
-                    if needed_sum > pending_count * 10: return "Математически невозможно ❌"
+                    if needed_now <= 0: return "Уже достигнуто! ✅"
+                    if count_pending == 0: return "Невозможно (экзаменов больше нет)"
 
-                    # Генерируем красивый вариант (равномерный)
-                    base = needed_sum // pending_count
-                    remainder = needed_sum % pending_count
-                    comb = [base + 1] * remainder + [base] * (pending_count - remainder)
+                    avg_req = needed_now / count_pending
+                    if avg_req > 10: return f"Недостижимо (нужно {avg_req:.1f})"
 
-                    if any(x > 10 for x in comb): return "Нужны оценки выше 10 ❌"
-                    if any(x < 4 for x in comb): return "Хватит даже четверок! 👍"
+                    # Распределяем баллы (твоя идея с перебором)
+                    base = int(needed_now // count_pending)
+                    remainder = int(needed_now % count_pending)
+                    comb = [base + 1] * remainder + [base] * (count_pending - remainder)
 
+                    if base < 4: return "Достаточно сдавать на 4.0 👍"
                     return " + ".join(map(str, sorted(comb, reverse=True)))
 
-                # Формируем блок анализа
-                analysis_text = f"Семестровый балл сейчас: {(sum_current / len(current_grades) if current_grades else 0):.2f}\n"
+                # Формируем карточку анализа
+                analysis_text = (
+                    f"Средний балл семестра: {sem_avg:.2f}\n"
+                    f"Предметов с оценкой: {count_done} из {total_count}\n"
+                )
 
-                if pending_count > 0:
-                    analysis_text += f"Нужные комбинации для остатка ({pending_count} предм.):\n"
-                    analysis_text += f"🎯 Для 8.0: {get_combinations(8.0)}\n"
-                    analysis_text += f"🎯 Для 9.0: {get_combinations(9.0)}"
+                if count_pending > 0:
+                    analysis_text += f"🎯 Цель 8.0: {get_combinations(8.0)}\n"
+                    analysis_text += f"🎯 Цель 9.0: {get_combinations(9.0)}"
                 else:
-                    analysis_text += "Все оценки выставлены."
+                    analysis_text += "Все оценки получены!"
 
-                # Добавляем в интерфейс
                 results_view.controls.append(
                     ft.Container(
-                        content=ft.Text(analysis_text, color=ft.Colors.AMBER_ACCENT, weight="bold", size=13),
+                        content=ft.Text(analysis_text, color=ft.Colors.AMBER_ACCENT, weight="bold"),
                         bgcolor=ft.Colors.GREY_900,
                         padding=15,
                         border_radius=10,
@@ -75,7 +97,7 @@ def main(page: ft.Page):
                     )
                 )
 
-                # Отрисовка списка предметов (оставляем как было)
+                # Отрисовка предметов (без изменений)
                 for s in subjects:
                     grade = s.get("grade", "—")
                     is_p = not (str(grade).isdigit() or grade == "зачтено")
@@ -84,7 +106,7 @@ def main(page: ft.Page):
                             content=ft.ListTile(
                                 title=ft.Text(s.get("disciplineName"),
                                               color=ft.Colors.GREY_400 if is_p else ft.Colors.WHITE),
-                                subtitle=ft.Text(f"{s.get('examType')}"),
+                                subtitle=ft.Text(s.get("examType", "Экзамен")),
                                 trailing=ft.Text("?" if is_p else str(grade), size=18, weight="bold",
                                                  color=ft.Colors.GREEN_ACCENT if not is_p else ft.Colors.WHITE),
                             ),
