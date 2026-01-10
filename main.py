@@ -89,27 +89,47 @@ def main(page: ft.Page):
                 prog_ring.color = ft.Colors.CYAN_ACCENT if current_avg >= 8 else ft.Colors.AMBER_ACCENT
                 ring_text.value = f"{current_avg:.2f}"
 
-                # 2. Расчет комбинаций для целевого балла
-                real_grades = [int(s['grade']) for s in subjects if str(s.get('grade')).isdigit()]
-                pending_ones = [s for s in subjects if
-                                not str(s.get('grade')).isdigit() and s.get('grade') != "зачтено" and (
-                                            "зачет" not in str(s.get('examType')).lower() or "дифф" in str(
-                                        s.get('examType')).lower())]
-                sum_real = sum(real_grades)
-                p_count = len(pending_ones)
-                total_aff = len(real_grades) + p_count
+                # --- 2. БЛОК АНАЛИТИКИ (ТЕПЕРЬ ДИНАМИЧЕСКИЙ) ---
+
+                # Собираем все оценки: и реальные, и те, что ты натыкал (прогнозы)
+                combined_grades = []
+                # Список предметов, которые всё еще остаются без оценки (даже без прогноза)
+                actually_pending = []
+
+                for s in subjects:
+                    s_name = s.get("disciplineName")
+                    s_type = s.get("examType")
+                    s_key = f"{s_name}_{s_type}"
+
+                    grade_val = str(s.get("grade", ""))
+
+                    if grade_val.isdigit():
+                        combined_grades.append(int(grade_val))
+                    elif s_key in v_grades:
+                        combined_grades.append(v_grades[s_key])
+                    # Если это не зачет, а оценка, и её всё еще нет
+                    elif "зачет" not in str(s_type).lower() or "дифф" in str(s_type).lower():
+                        actually_pending.append(s)
+
+                sum_current = sum(combined_grades)
+                count_total = len(combined_grades) + len(actually_pending)
 
                 def get_combos(target):
-                    needed = (target * total_aff) - sum_real
-                    if needed <= 0: return "Достигнуто! ✅"
-                    if p_count == 0: return "—"
-                    avg_req = needed / p_count
-                    if avg_req > 10: return "Недостижимо"
-                    base = int(needed // p_count)
-                    rem = int(needed % p_count)
-                    return " + ".join(map(str, sorted([base + 1] * rem + [base] * (p_count - rem), reverse=True)))
+                    needed = (target * count_total) - sum_current
+                    remaining_slots = len(actually_pending)
 
-                # Добавляем карточку анализа
+                    if needed <= 0: return "Достигнуто! ✅"
+                    if remaining_slots == 0: return "—"
+
+                    avg_req = needed / remaining_slots
+                    if avg_req > 10: return "Недостижимо"
+
+                    base = int(needed // remaining_slots)
+                    rem = int(needed % remaining_slots)
+                    # Формируем строку вида "9 + 8 + 8"
+                    return " + ".join(
+                        map(str, sorted([base + 1] * rem + [base] * (remaining_slots - rem), reverse=True)))
+
                 results_view.controls.append(
                     ft.Container(
                         content=ft.Column([
@@ -118,6 +138,7 @@ def main(page: ft.Page):
                                 ft.Text("АНАЛИЗ СЕМЕСТРА", weight="bold", size=14, color=ft.Colors.CYAN_ACCENT),
                             ], alignment=ft.MainAxisAlignment.CENTER),
                             ft.Divider(height=1, color=ft.Colors.WHITE24),
+                            # Теперь эти строки зависят от того, что ты уже выбрал в прогнозе
                             ft.Text(f"🎯 Для 8.0: {get_combos(8.0)}", size=13, color=ft.Colors.GREY_300),
                             ft.Text(f"🎯 Для 9.0: {get_combos(9.0)}", size=13, color=ft.Colors.GREY_300),
                         ], spacing=8),
