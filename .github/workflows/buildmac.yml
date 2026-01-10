@@ -27,8 +27,7 @@ jobs:
 
       - name: Build IPA
         run: |
-          # Собираем без подписи, чтобы можно было установить через AltStore/Sideloadly
-          flet build ipa --product "Зачётка ВГТУ" --org "vlad.os" --no-codesign
+          flet build ipa --product "Зачётка ВГТУ" --no-codesign
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
