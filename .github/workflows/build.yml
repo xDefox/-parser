@@ -1,0 +1,35 @@
+name: Build Zachetka APK
+on:
+  workflow_dispatch: # Позволяет запускать сборку вручную кнопкой
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install Flet CLI and Deps
+        run: |
+          pip install flet
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Build APK
+        run: |
+          # Собираем APK с твоим названием
+          flet build apk --product "Зачётка ВГТУ" --org "ru.vlados"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: zachetka-apk
+          path: build/apk/*.apk
