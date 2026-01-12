@@ -25,8 +25,7 @@ jobs:
 
       - name: Build APK
         run: |
-          # Собираем APK с твоим названием
-          flet build apk --product "Зачётка ВГТУ" --org "ru.vlados"
+          flet build apk --product "Зачётка ВГТУ"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
