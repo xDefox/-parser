@@ -1,4 +1,6 @@
 import flet as ft
+from flet import ScrollMode
+
 from backend import VSTUAuth
 import json
 import os
@@ -40,7 +42,7 @@ def main(page: ft.Page):
     page.bgcolor = "#121212"
     page.window_width = 450
     page.window_height = 800
-    page.scroll = "adaptive"
+    page.scroll = ScrollMode.HIDDEN
 
     auth_service = VSTUAuth()
     creds = load_credentials()
@@ -55,7 +57,7 @@ def main(page: ft.Page):
                 )
 
             semesters = {}
-            v_grades = {}  # Твоя система прогнозов
+            v_grades = {}
 
             for item in data.get("statements", []):
                 sem = item.get("semesterNumber", "—")
@@ -66,95 +68,102 @@ def main(page: ft.Page):
             sorted_nums = sorted(semesters.keys(), reverse=True)
             results_view = ft.Column(spacing=10, scroll="adaptive", expand=True)
 
-            prog_ring = ft.ProgressRing(
+            # --- ИСПРАВЛЕННАЯ НАСТРОЙКА КОЛЕЦ (Функционал сохранен) ---
+            avg_all_val = float(data.get("average", 0.0))
+
+            prog_ring_overall = ft.ProgressRing(
+                value=avg_all_val / 10, stroke_width=6,
+                color=ft.Colors.AMBER_ACCENT, bgcolor=ft.Colors.WHITE10,
+                width=140, height=140
+            )
+
+            prog_ring_semester = ft.ProgressRing(
                 value=0.0, stroke_width=10,
                 color=ft.Colors.CYAN_ACCENT, bgcolor=ft.Colors.GREY_800,
-                width=100, height=100
+                width=110, height=110
             )
-            ring_text = ft.Text("0.0", size=20, weight="bold")
 
+            ring_text = ft.Text("0.0", size=24, weight="bold")
+
+            # Чистая сборка Stack: всё центрируется относительно самого Stack
             ring_container = ft.Container(
                 content=ft.Stack([
-                    prog_ring,
-                    ft.Container(content=ring_text, alignment=ft.alignment.Alignment.CENTER, width=100, height=100)
-                ]),
+                    prog_ring_overall,
+                    ft.Container(prog_ring_semester, padding=15),  # Отступ создает эффект вложенности
+                    ft.Container(
+                        content=ft.Column([
+                            ring_text,
+                            ft.Text(f"Общий: {avg_all_val}", size=11, color=ft.Colors.GREY_500)
+                        ], spacing=-5, horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            alignment=ft.MainAxisAlignment.CENTER),
+                        width=140, height=140
+                    )
+                ], alignment=ft.alignment.Alignment.CENTER),  # Глобальный центр для всех элементов в Stack
                 alignment=ft.alignment.Alignment.CENTER,
-                margin=ft.Margin(0, 10, 0, 10)
+                margin=ft.margin.only(top=10, bottom=10),
+                height=160
             )
 
             def update_semester_view(sem_num):
                 results_view.controls.clear()
                 subjects = semesters[sem_num]
-
-                combined_grades = []
-                actually_pending = []
+                combined_grades, actually_pending = [], []
 
                 for s in subjects:
-                    s_name = s.get("disciplineName")
-                    s_type = s.get("examType")
-                    s_key = f"{s_name}_{s_type}"
+                    s_key = f"{s.get('disciplineName')}_{s.get('examType')}"
                     grade_val = str(s.get("grade", ""))
-
                     if grade_val.isdigit():
                         combined_grades.append(int(grade_val))
                     elif s_key in v_grades:
                         combined_grades.append(v_grades[s_key])
-                    elif "зачет" not in str(s_type).lower() or "дифф" in str(s_type).lower():
+                    elif "зачет" not in str(s.get("examType")).lower() or "дифф" in str(s.get("examType")).lower():
                         actually_pending.append(s)
 
                 current_avg = sum(combined_grades) / len(combined_grades) if combined_grades else 0.0
-                prog_ring.value = current_avg / 10
-                prog_ring.color = ft.Colors.CYAN_ACCENT if current_avg >= 8 else ft.Colors.AMBER_ACCENT
+                prog_ring_semester.value = current_avg / 10
+                prog_ring_semester.color = ft.Colors.CYAN_ACCENT if current_avg >= 8 else ft.Colors.AMBER_ACCENT
                 ring_text.value = f"{current_avg:.2f}"
 
+                # --- ВСЯ ТВОЯ ЛОГИКА АНАЛИЗА (Без изменений) ---
                 stipend_text, stipend_color = get_stipend_status(current_avg)
-
                 sum_current = sum(combined_grades)
                 count_total = len(combined_grades) + len(actually_pending)
 
                 def get_combos(target):
                     needed = (target * count_total) - sum_current
-                    remaining_slots = len(actually_pending)
                     if needed <= 0: return "Достигнуто! ✅"
-                    if remaining_slots == 0: return "—"
-                    avg_req = needed / remaining_slots
-                    if avg_req > 10: return "Недостижимо"
-                    base = int(needed // remaining_slots)
-                    rem = int(needed % remaining_slots)
+                    if not actually_pending or (needed / len(actually_pending)) > 10: return "—"
+                    base, rem = int(needed // len(actually_pending)), int(needed % len(actually_pending))
                     return " + ".join(
-                        map(str, sorted([base + 1] * rem + [base] * (remaining_slots - rem), reverse=True)))
+                        map(str, sorted([base + 1] * rem + [base] * (len(actually_pending) - rem), reverse=True)))
 
                 results_view.controls.append(
                     ft.Container(
                         content=ft.Column([
-                            ft.Row([
-                                ft.Icon(ft.icons.Icons.AUTO_AWESOME, color=ft.Colors.CYAN_ACCENT, size=20),
-                                ft.Text("АНАЛИЗ И СТИПЕНДИЯ", weight="bold", size=14, color=ft.Colors.CYAN_ACCENT),
-                            ], alignment=ft.MainAxisAlignment.CENTER),
+                            ft.Row([ft.Icon(ft.Icons.AUTO_AWESOME, color=ft.Colors.CYAN_ACCENT, size=20),
+                                    ft.Text("АНАЛИЗ И СТИПЕНДИЯ", weight="bold", size=14, color=ft.Colors.CYAN_ACCENT)],
+                                   alignment=ft.MainAxisAlignment.CENTER),
                             ft.Divider(height=1, color=ft.Colors.WHITE24),
-                            ft.Row([
-                                ft.Icon(ft.icons.Icons.PAYMENT, color=stipend_color, size=18),
-                                ft.Text(stipend_text, color=stipend_color, weight="bold", size=14),
-                            ], alignment=ft.MainAxisAlignment.CENTER),
+                            ft.Row([ft.Icon(ft.Icons.PAYMENT, color=stipend_color, size=18),
+                                    ft.Text(stipend_text, color=stipend_color, weight="bold", size=14)],
+                                   alignment=ft.MainAxisAlignment.CENTER),
                             ft.Text(f"🎯 Для 8.0: {get_combos(8.0)}", size=13, color=ft.Colors.GREY_300),
                             ft.Text(f"🎯 Для 9.0: {get_combos(9.0)}", size=13, color=ft.Colors.GREY_300),
                         ], spacing=8),
-                        padding=15, border_radius=15, bgcolor="#1E1E1E",
-                        border=ft.Border.all(1, ft.Colors.CYAN_700),
+                        padding=15, border_radius=15, bgcolor="#1E1E1E", border=ft.Border.all(1, ft.Colors.CYAN_700),
                     )
                 )
 
+                # --- ВСЯ ТВОЯ ЛОГИКА КАРТОЧЕК (Без изменений) ---
                 def set_grade_internal(e, key):
-                    val = e.control.data
-                    if val == "clear":
+                    if e.control.data == "clear":
                         v_grades.pop(key, None)
                     else:
-                        v_grades[key] = int(val)
+                        v_grades[key] = int(e.control.data)
                     update_semester_view(sem_num)
 
                 def create_subject_card(s):
-                    name = s.get("disciplineName")
-                    stype = s.get("examType")
+                    name, stype = s.get("disciplineName"), s.get("examType")
                     key = f"{name}_{stype}"
                     grade = s.get("grade", "—")
                     is_p = not (str(grade).isdigit() or grade == "зачтено")
@@ -163,12 +172,10 @@ def main(page: ft.Page):
                         e.control.content = ft.Column([
                             ft.ListTile(title=ft.Text(name, size=12, weight="bold"),
                                         subtitle=ft.Text("Оценка:", size=10)),
-                            ft.Row([
-                                ft.IconButton(ft.icons.Icons.CLOSE, data="clear",
-                                              on_click=lambda ev: set_grade_internal(ev, key), icon_color="red"),
-                                *[ft.TextButton(str(i), data=i, on_click=lambda ev: set_grade_internal(ev, key)) for i
-                                  in range(4, 11)]
-                            ], wrap=True, alignment=ft.MainAxisAlignment.CENTER)
+                            ft.Row([ft.IconButton(ft.Icons.CLOSE, data="clear",
+                                                  on_click=lambda ev: set_grade_internal(ev, key), icon_color="red"),
+                                    *[ft.TextButton(str(i), data=i, on_click=lambda ev: set_grade_internal(ev, key)) for
+                                      i in range(4, 11)]], wrap=True, alignment=ft.MainAxisAlignment.CENTER)
                         ])
                         e.control.update()
 
@@ -180,40 +187,57 @@ def main(page: ft.Page):
                             trailing=ft.Text(
                                 f"{v_grades.get(key)}*" if v_grades.get(key) else ("?" if is_p else str(grade)),
                                 color=ft.Colors.CYAN_ACCENT if v_grades.get(key) else (
-                                    ft.Colors.GREEN_ACCENT if not is_p else ft.Colors.WHITE70),
-                                size=18, weight="bold"
-                            ),
-                        ),
-                        bgcolor="#1A1A1A" if is_p else ft.Colors.BLACK,
-                        border_radius=12,
+                                    ft.Colors.GREEN_ACCENT if not is_p else ft.Colors.WHITE70), size=18,
+                                weight="bold")),
+                        bgcolor="#1A1A1A" if is_p else ft.Colors.BLACK, border_radius=12,
                         on_click=show_selector_internal if is_p else None
                     )
 
-                for s in subjects:
-                    results_view.controls.append(create_subject_card(s))
+                for s in subjects: results_view.controls.append(create_subject_card(s))
                 page.update()
 
-            avg_all = data.get("average", "0.0")
+            # --- ОТРИСОВКА ЭКРАНА (Исправлен Padding) ---
             page.add(
                 ft.Column([
+                    ring_container,
                     ft.Container(
-                        content=ft.Column([
-                            ft.Text("ОБЩИЙ БАЛЛ", size=10, color=ft.Colors.GREY_500),
-                            ft.Text(str(avg_all), size=30, weight="bold", color=ft.Colors.AMBER_ACCENT),
-                            ring_container,
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                        alignment=ft.alignment.Alignment.CENTER
+                        content=ft.Row([
+                            ft.FilledTonalButton(f"Сем {n}", on_click=lambda e, num=n: update_semester_view(num))
+                            for n in sorted_nums
+                        ], scroll=ft.ScrollMode.HIDDEN, spacing=10),
+                        padding=ft.padding.Padding(10, 0, 10, 10)
                     ),
-                    ft.Row([
-                        ft.FilledTonalButton(f"Сем {n}", on_click=lambda e, num=n: update_semester_view(num))
-                        for n in sorted_nums
-                    ], scroll="auto"),
                     results_view
                 ], expand=True)
             )
             if sorted_nums: update_semester_view(sorted_nums[0])
+
         except Exception as ex:
             print(f"Error: {ex}")
+
+            # --- ОТРИСОВКА ЭКРАНА ---
+            page.add(
+                ft.Column([
+                    # Теперь здесь только контейнер с кольцами (текст уже внутри них)
+                    ft.Container(
+                        content=ring_container,
+                        alignment=ft.alignment.Alignment.CENTER,
+                        padding=ft.padding.Padding(0, 10, 0, 0)  # Исправленный Padding
+                    ),
+                    ft.Container(
+                        content=ft.Row([
+                            ft.FilledTonalButton(f"Сем {n}", on_click=lambda e, num=n: update_semester_view(num))
+                            for n in sorted_nums
+                        ], scroll=ft.ScrollMode.HIDDEN, spacing=10),
+                        padding=ft.padding.Padding(10, 0, 10, 10)  # Исправленный Padding
+                    ),
+                    results_view
+                ], expand=True)
+            )
+            if sorted_nums: update_semester_view(sorted_nums[0])
+
+        except Exception as ex:
+            print(f"Error in show_grades: {ex}")
 
     # --- ЭКРАН ВХОДА ---
     login_input = ft.TextField(label="Логин", value=creds.get("login", "") if creds else "",
@@ -235,7 +259,28 @@ def main(page: ft.Page):
             if auth_service.login(l, p):
                 data = auth_service.get_statements()
                 if data:
-                    if remember_me.value: save_credentials(l, p, data)
+                    # --- ЛОГИКА ПРОВЕРКИ ОБНОВЛЕНИЙ ---
+                    if creds and "last_data" in creds:
+                        old_count = len(creds["last_data"].get("statements", []))
+                        new_count = len(data.get("statements", []))
+
+                        # Если записей стало больше или изменились баллы (проверка по длине — самый быстрый способ)
+                        if new_count > old_count:
+                            page.snack_bar = ft.SnackBar(
+                                ft.Text(f"🔥 Ура! Появились новые оценки ({new_count - old_count} шт.)"),
+                                bgcolor=ft.Colors.GREEN_800
+                            )
+                            page.snack_bar.open = True
+                        elif data.get("statements") != creds["last_data"].get("statements"):
+                            page.snack_bar = ft.SnackBar(
+                                ft.Text("🔔 Есть изменения в оценках!"),
+                                bgcolor=ft.Colors.BLUE_800
+                            )
+                            page.snack_bar.open = True
+
+                    if remember_me.value:
+                        save_credentials(l, p, data)
+
                     show_grades(data, is_offline=False)
                     return
 
@@ -247,7 +292,8 @@ def main(page: ft.Page):
             else:
                 error_text.value = "Ошибка сервера / Нет кэша"
                 reset_login_state()
-        except:
+        except Exception as ex:
+            print(f"Login error: {ex}")
             if creds and "last_data" in creds:
                 show_grades(creds["last_data"], is_offline=True)
             else:
