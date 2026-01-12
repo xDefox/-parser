@@ -2,7 +2,6 @@ import requests
 import urllib.parse
 import json
 
-
 class VSTUAuth:
     def __init__(self):
         self.session = requests.Session()
