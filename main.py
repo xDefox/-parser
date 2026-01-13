@@ -10,15 +10,15 @@ CONFIG_FILE = "config.json"
 
 def get_stipend_status(avg_grade):
     if avg_grade >= 9.0:
-        return "💰 Повышенная стипендия (9-10)", ft.Colors.CYAN_ACCENT
+        return "💰 Повышенная стипендия (x1.6)", ft.Colors.CYAN_ACCENT
     elif avg_grade >= 8.0:
-        return "💰 Повышенная стипендия (8-9)", ft.Colors.GREEN_ACCENT
+        return "💰 Повышенная стипендия (x1.4)", ft.Colors.GREEN_ACCENT
     elif avg_grade >= 6.0:
-        return "✅ Стипендия (6-8)", ft.Colors.BLUE_GREY_200
+        return "✅ Стипендия (x1.2)", ft.Colors.BLUE_GREY_200
     elif avg_grade >= 5.0:
-        return "✅ Минимальная стипендия (5-6)", ft.Colors.AMBER_100
+        return "✅ Минимальная стипендия (x1)", ft.Colors.AMBER_100
     else:
-        return "⚠️ Без стипендии (ниже 5.0)", ft.Colors.RED_ACCENT
+        return "⚠️ Без стипендии", ft.Colors.RED_ACCENT
 
 
 def save_credentials(login, password, data=None):
@@ -199,6 +199,7 @@ def main(page: ft.Page):
             # --- ОТРИСОВКА ЭКРАНА (Исправлен Padding) ---
             page.add(
                 ft.Column([
+                    ft.Container(height=30),
                     ring_container,
                     ft.Container(
                         content=ft.Row([
@@ -218,7 +219,6 @@ def main(page: ft.Page):
             # --- ОТРИСОВКА ЭКРАНА ---
             page.add(
                 ft.Column([
-                    # Теперь здесь только контейнер с кольцами (текст уже внутри них)
                     ft.Container(
                         content=ring_container,
                         alignment=ft.alignment.Alignment.CENTER,
@@ -229,9 +229,9 @@ def main(page: ft.Page):
                             ft.FilledTonalButton(f"Сем {n}", on_click=lambda e, num=n: update_semester_view(num))
                             for n in sorted_nums
                         ], scroll=ft.ScrollMode.HIDDEN, spacing=10),
-                        padding=ft.padding.Padding(10, 0, 10, 10)  # Исправленный Padding
+                        padding=ft.padding.Padding(10, 0, 10, 10) , # Исправленный Padding
                     ),
-                    results_view
+                    results_view,
                 ], expand=True)
             )
             if sorted_nums: update_semester_view(sorted_nums[0])
@@ -312,15 +312,18 @@ def main(page: ft.Page):
     page.add(
         ft.Container(
             content=ft.Column([
-                ft.Icon(ft.icons.Icons.SCHOOL, size=50, color=ft.Colors.BLUE_400),
+                ft.Container(height=80),  # Добавили отступ сверху (80 пикселей)
+                ft.Icon(ft.Icons.SCHOOL, size=50, color=ft.Colors.BLUE_400),
                 ft.Text("ВГТУ Зачетка", size=24, weight="bold"),
-                ft.Container(height=20),
-                login_input, pass_input,
+                ft.Container(height=40),  # Увеличили расстояние до полей ввода
+                login_input,
+                pass_input,
                 ft.Row([remember_me], alignment=ft.MainAxisAlignment.CENTER),
                 error_text,
                 ft.Row([login_button, loading_ring], alignment=ft.MainAxisAlignment.CENTER),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            alignment=ft.alignment.Alignment.CENTER, padding=20
+            alignment=ft.alignment.Alignment.CENTER,  # Прижимаем к верху, но с нашим отступом
+            padding=20
         )
     )
 
