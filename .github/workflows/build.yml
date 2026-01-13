@@ -25,10 +25,10 @@ jobs:
 
       - name: Build APK
         run: |
-          flet build apk --product "Зачётка ВГТУ"
+          flet build apk --product "Зачётка"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: zachetka-apk
+          name: VSTUzachetka
           path: build/apk/*.apk
