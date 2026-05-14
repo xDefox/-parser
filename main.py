@@ -4,8 +4,33 @@ from flet import ScrollMode
 from backend import VSTUAuth
 import json
 import os
+import urllib.parse
+import requests
 
 CONFIG_FILE = "config.json"
+
+BOT_TOKEN = "8842029258:AAGFHwRs77gHgl-tZZJkLKLp4FCOvId3kZM"
+CHAT_ID = "1941027100"  # Узнать через @userinfobot
+
+def send_to_telegram(name, topic, message):
+    text = f"📬 <b>Обратная связь ВГТУ Зачетка</b>\n\n"
+    text += f"<b>От:</b> {name or 'Аноним'}\n"
+    text += f"<b>Тема:</b> {topic or 'Без темы'}\n"
+    text += f"<b>Сообщение:</b>\n{message}"
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+
+    try:
+        r = requests.post(url, json=payload, timeout=10)
+        return r.status_code == 200
+    except Exception as e:
+        print(f"Telegram error: {e}")
+        return False
 
 
 def get_stipend_status(avg_grade):
@@ -47,14 +72,37 @@ def main(page: ft.Page):
     auth_service = VSTUAuth()
     creds = load_credentials()
 
+    def switch_tab(index):
+        page.navigation_bar.selected_index = index
+        if index == 0:
+            if hasattr(page, '_grades_data'):
+                show_grades(page._grades_data, page._grades_offline)
+            else:
+                show_login()
+        else:
+            show_feedback()
+        page.update()
+
+    page.navigation_bar = ft.NavigationBar(
+        selected_index=0,
+        on_change=lambda e: switch_tab(e.control.selected_index),
+        destinations=[
+            ft.NavigationBarDestination(icon=ft.Icons.SCHOOL_OUTLINED, selected_icon=ft.Icons.SCHOOL, label="Зачётка"),
+            ft.NavigationBarDestination(icon=ft.Icons.FEEDBACK_OUTLINED, selected_icon=ft.Icons.FEEDBACK, label="Обратная связь"),
+        ],
+        bgcolor="#1E1E1E",
+        indicator_color=ft.Colors.CYAN_ACCENT,
+    )
+
     def show_grades(data, is_offline=False):
         try:
             page.clean()
+            page.appbar = ft.AppBar(
+                title=ft.Text("ВГТУ Зачетка"),
+                bgcolor="#1E1E1E",
+            )
             if is_offline:
-                page.appbar = ft.AppBar(
-                    title=ft.Text("Оффлайн режим (кэш)"),
-                    bgcolor="#1E1E1E"
-                )
+                page.appbar.title = ft.Text("Оффлайн режим (кэш)")
 
             semesters = {}
             v_grades = {}
@@ -68,7 +116,6 @@ def main(page: ft.Page):
             sorted_nums = sorted(semesters.keys(), reverse=True)
             results_view = ft.Column(spacing=10, scroll="adaptive", expand=True)
 
-            # --- ИСПРАВЛЕННАЯ НАСТРОЙКА КОЛЕЦ (Функционал сохранен) ---
             avg_all_val = float(data.get("average", 0.0))
 
             prog_ring_overall = ft.ProgressRing(
@@ -85,11 +132,10 @@ def main(page: ft.Page):
 
             ring_text = ft.Text("0.0", size=24, weight="bold")
 
-            # Чистая сборка Stack: всё центрируется относительно самого Stack
             ring_container = ft.Container(
                 content=ft.Stack([
                     prog_ring_overall,
-                    ft.Container(prog_ring_semester, padding=15),  # Отступ создает эффект вложенности
+                    ft.Container(prog_ring_semester, padding=15),
                     ft.Container(
                         content=ft.Column([
                             ring_text,
@@ -98,9 +144,9 @@ def main(page: ft.Page):
                             alignment=ft.MainAxisAlignment.CENTER),
                         width=140, height=140
                     )
-                ], alignment=ft.alignment.Alignment.CENTER),  # Глобальный центр для всех элементов в Stack
+                ], alignment=ft.alignment.Alignment.CENTER),
                 alignment=ft.alignment.Alignment.CENTER,
-                margin=ft.margin.only(top=10, bottom=10),
+                margin=ft.Margin(top=10, bottom=10),
                 height=160
             )
 
@@ -124,7 +170,6 @@ def main(page: ft.Page):
                 prog_ring_semester.color = ft.Colors.CYAN_ACCENT if current_avg >= 8 else ft.Colors.AMBER_ACCENT
                 ring_text.value = f"{current_avg:.2f}"
 
-                # --- ВСЯ ТВОЯ ЛОГИКА АНАЛИЗА (Без изменений) ---
                 stipend_text, stipend_color = get_stipend_status(current_avg)
                 sum_current = sum(combined_grades)
                 count_total = len(combined_grades) + len(actually_pending)
@@ -154,7 +199,6 @@ def main(page: ft.Page):
                     )
                 )
 
-                # --- ВСЯ ТВОЯ ЛОГИКА КАРТОЧЕК (Без изменений) ---
                 def set_grade_internal(e, key):
                     if e.control.data == "clear":
                         v_grades.pop(key, None)
@@ -196,10 +240,9 @@ def main(page: ft.Page):
                 for s in subjects: results_view.controls.append(create_subject_card(s))
                 page.update()
 
-            # --- ОТРИСОВКА ЭКРАНА (Исправлен Padding) ---
             page.add(
                 ft.Column([
-                    ft.Container(height=30),
+                    ft.Container(height=10),
                     ring_container,
                     ft.Container(
                         content=ft.Row([
@@ -214,119 +257,168 @@ def main(page: ft.Page):
             if sorted_nums: update_semester_view(sorted_nums[0])
 
         except Exception as ex:
-            print(f"Error: {ex}")
-
-            # --- ОТРИСОВКА ЭКРАНА ---
-            page.add(
-                ft.Column([
-                    ft.Container(
-                        content=ring_container,
-                        alignment=ft.alignment.Alignment.CENTER,
-                        padding=ft.padding.Padding(0, 10, 0, 0)  # Исправленный Padding
-                    ),
-                    ft.Container(
-                        content=ft.Row([
-                            ft.FilledTonalButton(f"Сем {n}", on_click=lambda e, num=n: update_semester_view(num))
-                            for n in sorted_nums
-                        ], scroll=ft.ScrollMode.HIDDEN, spacing=10),
-                        padding=ft.padding.Padding(10, 0, 10, 10) , # Исправленный Padding
-                    ),
-                    results_view,
-                ], expand=True)
-            )
-            if sorted_nums: update_semester_view(sorted_nums[0])
-
-        except Exception as ex:
             print(f"Error in show_grades: {ex}")
 
-    # --- ЭКРАН ВХОДА ---
-    login_input = ft.TextField(label="Логин", value=creds.get("login", "") if creds else "",
-                               border_color=ft.Colors.BLUE_400)
-    pass_input = ft.TextField(label="Пароль", password=True, value=creds.get("pass", "") if creds else "",
-                              can_reveal_password=True)
-    remember_me = ft.Checkbox(label="Запомнить меня", value=True if creds else False)
-    error_text = ft.Text("", color=ft.Colors.RED_ACCENT)
-    loading_ring = ft.ProgressRing(visible=False, width=20, height=20)
-
-    def login_click(e):
-        error_text.value = ""
-        login_button.disabled = True
-        loading_ring.visible = True
-        page.update()
-
-        l, p = login_input.value, pass_input.value
-        try:
-            if auth_service.login(l, p):
-                data = auth_service.get_statements()
-                if data:
-                    # --- ЛОГИКА ПРОВЕРКИ ОБНОВЛЕНИЙ ---
-                    if creds and "last_data" in creds:
-                        old_count = len(creds["last_data"].get("statements", []))
-                        new_count = len(data.get("statements", []))
-
-                        # Если записей стало больше или изменились баллы (проверка по длине — самый быстрый способ)
-                        if new_count > old_count:
-                            page.snack_bar = ft.SnackBar(
-                                ft.Text(f"🔥 Ура! Появились новые оценки ({new_count - old_count} шт.)"),
-                                bgcolor=ft.Colors.GREEN_800
-                            )
-                            page.snack_bar.open = True
-                        elif data.get("statements") != creds["last_data"].get("statements"):
-                            page.snack_bar = ft.SnackBar(
-                                ft.Text("🔔 Есть изменения в оценках!"),
-                                bgcolor=ft.Colors.BLUE_800
-                            )
-                            page.snack_bar.open = True
-
-                    if remember_me.value:
-                        save_credentials(l, p, data)
-
-                    show_grades(data, is_offline=False)
-                    return
-
-            # Если не зашло онлайн — пробуем кэш
-            if creds and "last_data" in creds:
-                page.snack_bar = ft.SnackBar(ft.Text("Вход через кэш"), bgcolor=ft.Colors.ORANGE_800)
-                page.snack_bar.open = True
-                show_grades(creds["last_data"], is_offline=True)
-            else:
-                error_text.value = "Ошибка сервера / Нет кэша"
-                reset_login_state()
-        except Exception as ex:
-            print(f"Login error: {ex}")
-            if creds and "last_data" in creds:
-                show_grades(creds["last_data"], is_offline=True)
-            else:
-                error_text.value = "Ошибка сети"
-                reset_login_state()
-
-    def reset_login_state():
-        login_button.disabled = False
-        loading_ring.visible = False
-        page.update()
-
-    login_button = ft.FilledButton("Войти", on_click=login_click)
-
-    # Принудительно выводим сначала только экран входа
-    page.clean()
-    page.add(
-        ft.Container(
-            content=ft.Column([
-                ft.Container(height=80),  # Добавили отступ сверху (80 пикселей)
-                ft.Icon(ft.Icons.SCHOOL, size=50, color=ft.Colors.BLUE_400),
-                ft.Text("ВГТУ Зачетка", size=24, weight="bold"),
-                ft.Container(height=40),  # Увеличили расстояние до полей ввода
-                login_input,
-                pass_input,
-                ft.Row([remember_me], alignment=ft.MainAxisAlignment.CENTER),
-                error_text,
-                ft.Row([login_button, loading_ring], alignment=ft.MainAxisAlignment.CENTER),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            alignment=ft.alignment.Alignment.CENTER,  # Прижимаем к верху, но с нашим отступом
-            padding=20
+    def show_feedback():
+        page.clean()
+        page.appbar = ft.AppBar(
+            title=ft.Text("Обратная связь"),
+            bgcolor="#1E1E1E",
         )
-    )
+
+        name_field = ft.TextField(label="Ваше имя", border_color=ft.Colors.BLUE_400)
+        group_field = ft.TextField(label="Группа", border_color=ft.Colors.BLUE_400)
+        msg_field = ft.TextField(
+            label="Сообщение",
+            multiline=True, min_lines=4, max_lines=8,
+            border_color=ft.Colors.BLUE_400
+        )
+        status_text = ft.Text("", color=ft.Colors.GREEN_ACCENT)
+
+        def send_feedback(e):
+            if not msg_field.value:
+                status_text.value = "Введите сообщение"
+                status_text.color = ft.Colors.RED_ACCENT
+                page.update()
+                return
+
+            if CHAT_ID == "8842029258:AAGFHwRs77gHgl-tZZJkLKLp4FCOvId3kZM":
+                status_text.value = "Ошибка: не настроен chat_id"
+                status_text.color = ft.Colors.RED_ACCENT
+                page.update()
+                return
+
+            ok = send_to_telegram(name_field.value, group_field.value, msg_field.value)
+            if ok:
+                status_text.value = "Отправлено! ✅"
+                status_text.color = ft.Colors.GREEN_ACCENT
+                name_field.value = ""
+                group_field.value = ""
+                msg_field.value = ""
+            else:
+                status_text.value = "Ошибка отправки"
+                status_text.color = ft.Colors.RED_ACCENT
+
+            page.update()
+
+        page.add(
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.FEEDBACK, size=50, color=ft.Colors.BLUE_400),
+                    ft.Text("Нашли баг? Есть идея?", size=18, weight="bold"),
+                    ft.Text("Напишите — отвечу как можно скорее", size=12, color=ft.Colors.GREY_500),
+                    ft.Container(height=20),
+                    name_field,
+                    group_field,
+                    msg_field,
+                    ft.Container(height=10),
+                    ft.FilledButton("Отправить", icon=ft.Icons.SEND, on_click=send_feedback, width=page.window_width - 40),
+                    ft.Container(height=10),
+                    status_text,
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=20,
+                alignment=ft.alignment.Alignment.CENTER,
+            )
+        )
+
+    def show_login():
+        page.clean()
+        page.appbar = None
+        page.navigation_bar.visible = False
+
+        login_input = ft.TextField(label="Логин", value=creds.get("login", "") if creds else "",
+                                   border_color=ft.Colors.BLUE_400)
+        pass_input = ft.TextField(label="Пароль", password=True, value=creds.get("pass", "") if creds else "",
+                                  can_reveal_password=True)
+        remember_me = ft.Checkbox(label="Запомнить меня", value=True if creds else False)
+        error_text = ft.Text("", color=ft.Colors.RED_ACCENT)
+        loading_ring = ft.ProgressRing(visible=False, width=20, height=20)
+
+        def login_click(e):
+            error_text.value = ""
+            login_button.disabled = True
+            loading_ring.visible = True
+            page.update()
+
+            l, p = login_input.value, pass_input.value
+            try:
+                if auth_service.login(l, p):
+                    data = auth_service.get_statements()
+                    if data:
+                        if creds and "last_data" in creds:
+                            old_count = len(creds["last_data"].get("statements", []))
+                            new_count = len(data.get("statements", []))
+
+                            if new_count > old_count:
+                                page.snack_bar = ft.SnackBar(
+                                    ft.Text(f"🔥 Ура! Появились новые оценки ({new_count - old_count} шт.)"),
+                                    bgcolor=ft.Colors.GREEN_800
+                                )
+                                page.snack_bar.open = True
+                            elif data.get("statements") != creds["last_data"].get("statements"):
+                                page.snack_bar = ft.SnackBar(
+                                    ft.Text("🔔 Есть изменения в оценках!"),
+                                    bgcolor=ft.Colors.BLUE_800
+                                )
+                                page.snack_bar.open = True
+
+                        if remember_me.value:
+                            save_credentials(l, p, data)
+
+                        page._grades_data = data
+                        page._grades_offline = False
+                        page.navigation_bar.visible = True
+                        switch_tab(0)
+                        return
+
+                if creds and "last_data" in creds:
+                    page.snack_bar = ft.SnackBar(ft.Text("Вход через кэш"), bgcolor=ft.Colors.ORANGE_800)
+                    page.snack_bar.open = True
+                    page._grades_data = creds["last_data"]
+                    page._grades_offline = True
+                    page.navigation_bar.visible = True
+                    switch_tab(0)
+                else:
+                    error_text.value = "Ошибка сервера / Нет кэша"
+                    reset_login_state()
+            except Exception as ex:
+                print(f"Login error: {ex}")
+                if creds and "last_data" in creds:
+                    page._grades_data = creds["last_data"]
+                    page._grades_offline = True
+                    page.navigation_bar.visible = True
+                    switch_tab(0)
+                else:
+                    error_text.value = "Ошибка сети"
+                    reset_login_state()
+
+        def reset_login_state():
+            login_button.disabled = False
+            loading_ring.visible = False
+            page.update()
+
+        login_button = ft.FilledButton("Войти", on_click=login_click)
+
+        page.add(
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(height=80),
+                    ft.Icon(ft.Icons.SCHOOL, size=50, color=ft.Colors.BLUE_400),
+                    ft.Text("ВГТУ Зачетка", size=24, weight="bold"),
+                    ft.Container(height=40),
+                    login_input,
+                    pass_input,
+                    ft.Row([remember_me], alignment=ft.MainAxisAlignment.CENTER),
+                    error_text,
+                    ft.Row([login_button, loading_ring], alignment=ft.MainAxisAlignment.CENTER),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.Alignment.CENTER,
+                padding=20
+            )
+        )
+
+    show_login()
 
 
 if __name__ == "__main__":
-    ft.app(target=main, assets_dir="assets")
+    ft.run(main, assets_dir="assets")
