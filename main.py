@@ -9,8 +9,8 @@ import requests
 
 CONFIG_FILE = "config.json"
 
-BOT_TOKEN = "8842029258:AAGFHwRs77gHgl-tZZJkLKLp4FCOvId3kZM"
-CHAT_ID = "1941027100"  # Узнать через @userinfobot
+BOT_TOKEN = "укажите токен бота"
+CHAT_ID = "узнать у BotFather"
 
 def send_to_telegram(name, topic, message):
     text = f"📬 <b>Обратная связь ВГТУ Зачетка</b>\n\n"
