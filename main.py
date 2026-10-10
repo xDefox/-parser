@@ -9,8 +9,8 @@ import requests
 
 CONFIG_FILE = "config.json"
 
-BOT_TOKEN = "укажите токен бота"
-CHAT_ID = "узнать у BotFather"
+BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "укажите токен бота")
+CHAT_ID = os.environ.get("TG_CHAT_ID", "узнать у BotFather")
 
 def send_to_telegram(name, topic, message):
     text = f"📬 <b>Обратная связь ВГТУ Зачетка</b>\n\n"
@@ -282,8 +282,8 @@ def main(page: ft.Page):
                 page.update()
                 return
 
-            if CHAT_ID == "8842029258:AAGFHwRs77gHgl-tZZJkLKLp4FCOvId3kZM":
-                status_text.value = "Ошибка: не настроен chat_id"
+            if BOT_TOKEN == "укажите токен бота" or CHAT_ID == "узнать у BotFather":
+                status_text.value = "Ошибка: не настроен токен бота или chat_id"
                 status_text.color = ft.Colors.RED_ACCENT
                 page.update()
                 return

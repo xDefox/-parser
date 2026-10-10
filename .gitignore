@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Flet build output
+build/
+dist/
+*.apk
+*.aab
+*.ipa
+
+# Local state (contains saved credentials)
+config.json
